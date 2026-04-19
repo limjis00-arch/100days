@@ -75,7 +75,10 @@
             Trash2: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`,
             Check: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
             Info: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`,
-            Edit3: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`
+            Edit3: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`,
+            Download: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`,
+            Upload: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>`,
+            AlertTriangle: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`
         };
 
         // --- 전역 상태 관리 ---
@@ -86,7 +89,10 @@
             isAddModalOpen: false,
             isRecordModalOpen: false,
             selectedDay: null,
-            deleteConfirm: { isOpen: false, id: null }
+            deleteConfirm: { isOpen: false, id: null },
+            // 백업/복원 알림용 상태
+            alertBox: { isOpen: false, title: '', message: '', type: 'info' }, // type: info, error
+            importConfirm: { isOpen: false, data: null }
         };
 
         function updateState(newState) {
@@ -99,6 +105,7 @@
         window.openAddModal = () => updateState({ isAddModalOpen: true });
         window.closeAddModal = () => updateState({ isAddModalOpen: false });
         window.openChallenge = (id) => updateState({ currentView: 'detail', activeChallengeId: id });
+        window.closeAlert = () => updateState({ alertBox: { isOpen: false, title: '', message: '', type: 'info' } });
 
         window.submitChallenge = (event) => {
             event.preventDefault();
@@ -119,6 +126,7 @@
             });
         };
 
+        // 삭제 확인 모달
         window.promptDelete = (id, event) => {
             event.stopPropagation();
             updateState({ deleteConfirm: { isOpen: true, id: id } });
@@ -135,6 +143,7 @@
             updateState(updates);
         };
 
+        // 기록 작성/수정
         window.openRecordModal = (day) => {
             updateState({ isRecordModalOpen: true, selectedDay: day });
             setTimeout(() => {
@@ -142,7 +151,6 @@
                 const record = active.records[day];
                 if (record) document.getElementById('recordNote').value = record.note;
                 
-                // 모바일에서 키보드가 올라올 때를 대비해 약간 딜레이 후 포커스
                 setTimeout(() => document.getElementById('recordNote').focus(), 50);
             }, 0);
         };
@@ -153,7 +161,6 @@
             const note = document.getElementById('recordNote').value.trim();
             const day = state.selectedDay;
             
-            // 기존 기록의 날짜를 유지하거나, 없으면 오늘 날짜 생성
             const activeChallenge = state.challenges.find(c => c.id === state.activeChallengeId);
             const existingRecord = activeChallenge.records[day];
             const recordDate = existingRecord && existingRecord.date ? existingRecord.date : new Date().toISOString();
@@ -183,6 +190,66 @@
             updateState({ challenges: newChallenges, isRecordModalOpen: false, selectedDay: null });
         };
 
+        // --- 백업 및 복원 기능 ---
+        window.exportData = () => {
+            if (state.challenges.length === 0) {
+                updateState({ alertBox: { isOpen: true, title: '백업 실패', message: '백업할 도전 기록이 없습니다.', type: 'error' }});
+                return;
+            }
+            const dataStr = JSON.stringify(state.challenges);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            
+            const date = new Date();
+            const dateString = `${date.getFullYear()}${String(date.getMonth()+1).padStart(2,'0')}${String(date.getDate()).padStart(2,'0')}`;
+            a.download = `100days_backup_${dateString}.json`;
+            
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            updateState({ alertBox: { isOpen: true, title: '백업 완료', message: '데이터 백업 파일이 다운로드되었습니다. 소중한 곳에 보관해 주세요!', type: 'info' }});
+        };
+
+        window.importData = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const parsedData = JSON.parse(e.target.result);
+                    if (Array.isArray(parsedData)) {
+                        // 정상적인 데이터인지 확인 후 복원 모달 열기
+                        updateState({ importConfirm: { isOpen: true, data: parsedData } });
+                    } else {
+                        throw new Error("Invalid format");
+                    }
+                } catch (err) {
+                    updateState({ alertBox: { isOpen: true, title: '오류', message: '올바른 백업 파일(.json)이 아닙니다.', type: 'error' }});
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = ''; // 선택 초기화
+        };
+
+        window.cancelImport = () => updateState({ importConfirm: { isOpen: false, data: null } });
+        window.confirmImport = () => {
+            const newData = state.importConfirm.data;
+            updateState({ 
+                challenges: newData, 
+                currentView: 'list', 
+                activeChallengeId: null,
+                importConfirm: { isOpen: false, data: null },
+                alertBox: { isOpen: true, title: '복원 성공! 🎉', message: '기존 데이터가 성공적으로 복원되었습니다.', type: 'info' }
+            });
+        };
+
+
+        // --- 렌더링 함수 ---
         function renderHeader() {
             return `
                 <header class="bg-white shadow-sm sticky top-0 z-10 env-safe-area-top">
@@ -208,8 +275,10 @@
         }
 
         function renderListView() {
+            let contentHTML = '';
+            
             if (state.challenges.length === 0) {
-                return `
+                contentHTML = `
                     <div class="text-center py-20 bg-white rounded-2xl shadow-sm border border-purple-100 fade-in mx-4 mt-8">
                         <div class="text-6xl mb-4">🌱</div>
                         <h2 class="text-xl font-semibold text-slate-700 mb-2">아직 시작한 도전이 없어요!</h2>
@@ -219,31 +288,44 @@
                         </button>
                     </div>
                 `;
+            } else {
+                const cardsHTML = state.challenges.map(challenge => {
+                    const completedDays = Object.keys(challenge.records).length;
+                    const progress = Math.round((completedDays / 100) * 100);
+                    return `
+                        <div onclick="openChallenge('${challenge.id}')" class="bg-white p-5 rounded-2xl shadow-sm border border-purple-100 active:bg-purple-50 transition-all cursor-pointer group fade-in">
+                            <div class="flex justify-between items-start mb-4">
+                                <h3 class="text-lg font-bold text-slate-800 line-clamp-2 pr-4">${escapeHTML(challenge.title)}</h3>
+                                <button onclick="promptDelete('${challenge.id}', event)" class="text-slate-300 hover:text-red-500 p-2 -m-2 rounded-full active:bg-red-50 transition-all">
+                                    ${Icons.Trash2}
+                                </button>
+                            </div>
+                            <div class="flex items-end justify-between mb-2">
+                                <span class="text-sm font-medium text-slate-500">진행률</span>
+                                <span class="text-2xl font-black text-purple-600">${progress}%</span>
+                            </div>
+                            <div class="w-full bg-purple-100 rounded-full h-2.5">
+                                <div class="bg-purple-600 h-2.5 rounded-full transition-all duration-500" style="width: ${progress}%"></div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                contentHTML = `<div class="grid gap-4 sm:grid-cols-2 p-4 pt-8">${cardsHTML}</div>`;
             }
 
-            const cardsHTML = state.challenges.map(challenge => {
-                const completedDays = Object.keys(challenge.records).length;
-                const progress = Math.round((completedDays / 100) * 100);
-                return `
-                    <div onclick="openChallenge('${challenge.id}')" class="bg-white p-5 rounded-2xl shadow-sm border border-purple-100 active:bg-purple-50 transition-all cursor-pointer group fade-in">
-                        <div class="flex justify-between items-start mb-4">
-                            <h3 class="text-lg font-bold text-slate-800 line-clamp-2 pr-4">${escapeHTML(challenge.title)}</h3>
-                            <button onclick="promptDelete('${challenge.id}', event)" class="text-slate-300 hover:text-red-500 p-2 -m-2 rounded-full active:bg-red-50 transition-all">
-                                ${Icons.Trash2}
-                            </button>
-                        </div>
-                        <div class="flex items-end justify-between mb-2">
-                            <span class="text-sm font-medium text-slate-500">진행률</span>
-                            <span class="text-2xl font-black text-purple-600">${progress}%</span>
-                        </div>
-                        <div class="w-full bg-purple-100 rounded-full h-2.5">
-                            <div class="bg-purple-600 h-2.5 rounded-full transition-all duration-500" style="width: ${progress}%"></div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            return `<div class="grid gap-4 sm:grid-cols-2 p-4 pt-8">${cardsHTML}</div>`;
+            // 하단 데이터 백업/복원 버튼 영역
+            return `
+                ${contentHTML}
+                <div class="mt-12 mb-8 pt-6 border-t border-purple-200 flex justify-center gap-6 text-sm mx-4 fade-in">
+                    <button onclick="exportData()" class="text-slate-500 hover:text-purple-600 flex items-center gap-1.5 px-3 py-2 rounded-lg active:bg-purple-100 transition-colors">
+                        ${Icons.Download} 데이터 백업
+                    </button>
+                    <label class="text-slate-500 hover:text-purple-600 flex items-center gap-1.5 cursor-pointer px-3 py-2 rounded-lg active:bg-purple-100 transition-colors">
+                        ${Icons.Upload} 데이터 복원
+                        <input type="file" accept=".json" class="hidden" onchange="importData(event)">
+                    </label>
+                </div>
+            `;
         }
 
         function renderDetailView() {
@@ -255,8 +337,7 @@
             for (let i = 1; i <= 100; i++) {
                 const record = challenge.records[i];
                 if (record) {
-                    // 기록된 날짜를 툴팁에 추가
-                    const dateStr = record.date ? ` (${formatDate(record.date)})` : '';
+                    const dateStr = record.date ? `\n(${formatDate(record.date)})` : '';
                     grapesHTML += `
                         <button onclick="openRecordModal(${i})" title="${i}일차${dateStr} : ${escapeHTML(record.note)}" class="grape-btn relative aspect-square rounded-full flex flex-col items-center justify-center text-xs md:text-sm transition-all duration-200 shadow-sm overflow-hidden p-1 bg-gradient-to-br from-purple-500 to-purple-700 text-white active:scale-95">
                             <span class="font-bold opacity-90 leading-none">${i}</span>
@@ -275,7 +356,6 @@
             let recentRecordsHTML = '';
             const recordsEntries = Object.entries(challenge.records);
             if (recordsEntries.length > 0) {
-                // 최근 기록 리스트 (기록일자 추가)
                 const recentList = recordsEntries.sort((a, b) => Number(b[0]) - Number(a[0])).slice(0, 5).map(([day, record]) => {
                     const dateTag = record.date ? `<span class="text-xs text-slate-400 ml-2 font-normal">[${formatDate(record.date)}]</span>` : '';
                     return `
@@ -332,6 +412,42 @@
         function renderModals() {
             let modalsHTML = '';
 
+            // 알림 메시지 모달
+            if (state.alertBox.isOpen) {
+                const isError = state.alertBox.type === 'error';
+                modalsHTML += `
+                    <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-[60]">
+                        <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl scale-in p-6 text-center">
+                            <div class="w-16 h-16 ${isError ? 'bg-red-50 text-red-500' : 'bg-purple-50 text-purple-600'} rounded-full flex items-center justify-center mx-auto mb-4">
+                                ${isError ? Icons.AlertTriangle : Icons.Check}
+                            </div>
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">${state.alertBox.title}</h3>
+                            <p class="text-slate-500 text-sm mb-6">${state.alertBox.message}</p>
+                            <button onclick="closeAlert()" class="w-full px-5 py-3 rounded-xl font-medium ${isError ? 'bg-red-500 active:bg-red-600' : 'bg-purple-600 active:bg-purple-700'} text-white transition-colors">확인</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 복원 확인 모달
+            if (state.importConfirm.isOpen) {
+                modalsHTML += `
+                    <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                        <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl scale-in p-6 text-center">
+                            <div class="w-16 h-16 bg-yellow-50 text-yellow-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                                ${Icons.AlertTriangle}
+                            </div>
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">데이터 덮어쓰기</h3>
+                            <p class="text-slate-500 text-sm mb-6">파일을 불러오면 <span class="font-bold text-red-500">현재 기기의 모든 기록이 삭제되고</span> 파일 내용으로 덮어씌워집니다.<br>계속하시겠습니까?</p>
+                            <div class="flex gap-3 justify-center">
+                                <button onclick="cancelImport()" class="px-5 py-3 rounded-xl font-medium text-slate-600 bg-slate-100 active:bg-slate-200 transition-colors flex-1">취소</button>
+                                <button onclick="confirmImport()" class="px-5 py-3 rounded-xl font-medium bg-purple-600 active:bg-purple-700 text-white transition-colors flex-1">복원하기</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
             if (state.isAddModalOpen) {
                 modalsHTML += `
                     <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
@@ -378,7 +494,6 @@
                 const challenge = state.challenges.find(c => c.id === state.activeChallengeId);
                 const record = challenge.records[state.selectedDay];
                 const hasRecord = !!record;
-                // 모달 상단에 날짜 표시
                 const dateDisplay = (hasRecord && record.date) ? ` <span class="text-sm font-normal text-purple-400">(${formatDate(record.date)})</span>` : '';
                 
                 modalsHTML += `
