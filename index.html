@@ -2,12 +2,21 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>100일 포도알 챌린지</title>
-    <!-- Tailwind CSS (디자인을 위한 CDN) -->
+    
+    <!-- iOS 전용 진짜 어플처럼 보이게 하는 마법의 코드 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="100일 포도알">
+    
+    <!-- 기본 포도알 아이콘 설정 (웹, iOS 모두 적용) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍇</text></svg>">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%23f3e8ff%22/><text x=%2250%22 y=%2250%22 font-size=%2270%22 text-anchor=%22middle%22 dominant-baseline=%22central%22>🍇</text></svg>">
+
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 부드러운 애니메이션 효과 */
         .fade-in { animation: fadeIn 0.3s ease-in-out; }
         .scale-in { animation: scaleIn 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
         
@@ -20,18 +29,21 @@
             to { transform: scale(1); opacity: 1; }
         }
         
-        /* 모바일에서 포도알이 너무 작아지지 않도록 최소 크기 지정 */
         .grape-btn {
             min-height: 36px;
         }
         @media (min-width: 768px) {
             .grape-btn { min-height: 48px; }
         }
+        
+        /* 모바일에서 터치할 때 파란색 박스 깜빡이는 현상 제거 */
+        * {
+            -webkit-tap-highlight-color: transparent;
+        }
     </style>
 </head>
-<body class="bg-purple-50 text-slate-800 font-sans min-h-screen">
+<body class="bg-purple-50 text-slate-800 font-sans min-h-screen pb-10">
 
-    <!-- 앱 전체가 렌더링될 컨테이너 -->
     <div id="app"></div>
 
     <script>
@@ -42,6 +54,13 @@
             return str.replace(/[&<>'"]/g, tag => ({
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
             }[tag]));
+        };
+        
+        // 날짜 포맷 함수 (예: 4/19)
+        const formatDate = (isoString) => {
+            if (!isoString) return '';
+            const date = new Date(isoString);
+            return `${date.getMonth() + 1}/${date.getDate()}`;
         };
 
         // --- 아이콘 (SVG) ---
@@ -57,7 +76,7 @@
         // --- 전역 상태 관리 ---
         let state = {
             challenges: JSON.parse(localStorage.getItem('100days-challenges')) || [],
-            currentView: 'list', // 'list' | 'detail'
+            currentView: 'list',
             activeChallengeId: null,
             isAddModalOpen: false,
             isRecordModalOpen: false,
@@ -65,18 +84,15 @@
             deleteConfirm: { isOpen: false, id: null }
         };
 
-        // 상태 업데이트 및 재렌더링
         function updateState(newState) {
             state = { ...state, ...newState };
             localStorage.setItem('100days-challenges', JSON.stringify(state.challenges));
             render();
         }
 
-        // --- 글로벌 핸들러 (HTML에서 직접 호출) ---
         window.goToList = () => updateState({ currentView: 'list', activeChallengeId: null });
         window.openAddModal = () => updateState({ isAddModalOpen: true });
         window.closeAddModal = () => updateState({ isAddModalOpen: false });
-        
         window.openChallenge = (id) => updateState({ currentView: 'detail', activeChallengeId: id });
 
         window.submitChallenge = (event) => {
@@ -98,7 +114,6 @@
             });
         };
 
-        // 삭제 확인 모달 관련
         window.promptDelete = (id, event) => {
             event.stopPropagation();
             updateState({ deleteConfirm: { isOpen: true, id: id } });
@@ -108,7 +123,6 @@
             const id = state.deleteConfirm.id;
             const newChallenges = state.challenges.filter(c => c.id !== id);
             let updates = { challenges: newChallenges, deleteConfirm: { isOpen: false, id: null } };
-            
             if (state.activeChallengeId === id) {
                 updates.currentView = 'list';
                 updates.activeChallengeId = null;
@@ -116,17 +130,15 @@
             updateState(updates);
         };
 
-        // 기록 모달 관련
         window.openRecordModal = (day) => {
             updateState({ isRecordModalOpen: true, selectedDay: day });
-            // 모달이 렌더링된 후 기존 값이 있으면 채워넣기 위함
             setTimeout(() => {
                 const active = state.challenges.find(c => c.id === state.activeChallengeId);
                 const record = active.records[day];
-                if (record) {
-                    document.getElementById('recordNote').value = record.note;
-                }
-                document.getElementById('recordNote').focus();
+                if (record) document.getElementById('recordNote').value = record.note;
+                
+                // 모바일에서 키보드가 올라올 때를 대비해 약간 딜레이 후 포커스
+                setTimeout(() => document.getElementById('recordNote').focus(), 50);
             }, 0);
         };
         window.closeRecordModal = () => updateState({ isRecordModalOpen: false, selectedDay: null });
@@ -136,14 +148,16 @@
             const note = document.getElementById('recordNote').value.trim();
             const day = state.selectedDay;
             
+            // 기존 기록의 날짜를 유지하거나, 없으면 오늘 날짜 생성
+            const activeChallenge = state.challenges.find(c => c.id === state.activeChallengeId);
+            const existingRecord = activeChallenge.records[day];
+            const recordDate = existingRecord && existingRecord.date ? existingRecord.date : new Date().toISOString();
+            
             const newChallenges = state.challenges.map(c => {
                 if (c.id === state.activeChallengeId) {
                     return {
                         ...c,
-                        records: {
-                            ...c.records,
-                            [day]: { completed: true, note: note, date: new Date().toISOString() }
-                        }
+                        records: { ...c.records, [day]: { completed: true, note: note, date: recordDate } }
                     };
                 }
                 return c;
@@ -164,10 +178,9 @@
             updateState({ challenges: newChallenges, isRecordModalOpen: false, selectedDay: null });
         };
 
-        // --- 렌더링 함수 ---
         function renderHeader() {
             return `
-                <header class="bg-white shadow-sm sticky top-0 z-10">
+                <header class="bg-white shadow-sm sticky top-0 z-10 env-safe-area-top">
                     <div class="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
                         <div class="flex items-center gap-2">
                             ${state.currentView === 'detail' ? `
@@ -192,10 +205,10 @@
         function renderListView() {
             if (state.challenges.length === 0) {
                 return `
-                    <div class="text-center py-20 bg-white rounded-2xl shadow-sm border border-purple-100 fade-in">
+                    <div class="text-center py-20 bg-white rounded-2xl shadow-sm border border-purple-100 fade-in mx-4 mt-8">
                         <div class="text-6xl mb-4">🌱</div>
                         <h2 class="text-xl font-semibold text-slate-700 mb-2">아직 시작한 도전이 없어요!</h2>
-                        <p class="text-slate-500 mb-6">첫 번째 100일 챌린지를 만들어 포도알을 모아보세요.</p>
+                        <p class="text-slate-500 mb-6">첫 번째 100일 챌린지를 만들어<br>포도알을 모아보세요.</p>
                         <button onclick="openAddModal()" class="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-full font-medium transition-colors">
                             ${Icons.Plus} 첫 번째 목표 만들기
                         </button>
@@ -206,12 +219,11 @@
             const cardsHTML = state.challenges.map(challenge => {
                 const completedDays = Object.keys(challenge.records).length;
                 const progress = Math.round((completedDays / 100) * 100);
-                
                 return `
-                    <div onclick="openChallenge('${challenge.id}')" class="bg-white p-5 rounded-2xl shadow-sm border border-purple-100 hover:shadow-md hover:border-purple-300 transition-all cursor-pointer group fade-in">
+                    <div onclick="openChallenge('${challenge.id}')" class="bg-white p-5 rounded-2xl shadow-sm border border-purple-100 active:bg-purple-50 transition-all cursor-pointer group fade-in">
                         <div class="flex justify-between items-start mb-4">
-                            <h3 class="text-lg font-bold text-slate-800 line-clamp-2">${escapeHTML(challenge.title)}</h3>
-                            <button onclick="promptDelete('${challenge.id}', event)" class="text-slate-300 hover:text-red-500 p-1 rounded-full hover:bg-red-50 md:opacity-0 group-hover:opacity-100 transition-all">
+                            <h3 class="text-lg font-bold text-slate-800 line-clamp-2 pr-4">${escapeHTML(challenge.title)}</h3>
+                            <button onclick="promptDelete('${challenge.id}', event)" class="text-slate-300 hover:text-red-500 p-2 -m-2 rounded-full active:bg-red-50 transition-all">
                                 ${Icons.Trash2}
                             </button>
                         </div>
@@ -226,7 +238,7 @@
                 `;
             }).join('');
 
-            return `<div class="grid gap-4 sm:grid-cols-2">${cardsHTML}</div>`;
+            return `<div class="grid gap-4 sm:grid-cols-2 p-4 pt-8">${cardsHTML}</div>`;
         }
 
         function renderDetailView() {
@@ -234,76 +246,77 @@
             if (!challenge) return '';
 
             const completedCount = Object.keys(challenge.records).length;
-
             let grapesHTML = '';
             for (let i = 1; i <= 100; i++) {
                 const record = challenge.records[i];
-                const isCompleted = !!record;
-                
-                if (isCompleted) {
+                if (record) {
+                    // 기록된 날짜를 툴팁에 추가
+                    const dateStr = record.date ? ` (${formatDate(record.date)})` : '';
                     grapesHTML += `
-                        <button onclick="openRecordModal(${i})" title="${i}일차 : ${escapeHTML(record.note)}" class="grape-btn relative aspect-square rounded-full flex flex-col items-center justify-center text-xs md:text-sm transition-all duration-200 shadow-sm overflow-hidden p-1 bg-gradient-to-br from-purple-500 to-purple-700 text-white hover:shadow-lg hover:scale-110">
+                        <button onclick="openRecordModal(${i})" title="${i}일차${dateStr} : ${escapeHTML(record.note)}" class="grape-btn relative aspect-square rounded-full flex flex-col items-center justify-center text-xs md:text-sm transition-all duration-200 shadow-sm overflow-hidden p-1 bg-gradient-to-br from-purple-500 to-purple-700 text-white active:scale-95">
                             <span class="font-bold opacity-90 leading-none">${i}</span>
                             ${record.note ? `<span class="text-[9px] md:text-[10px] font-normal opacity-80 truncate w-full text-center mt-0.5 md:mt-1 px-1 block">${escapeHTML(record.note)}</span>` : ''}
                         </button>
                     `;
                 } else {
                     grapesHTML += `
-                        <button onclick="openRecordModal(${i})" title="${i}일차 기록하기" class="grape-btn relative aspect-square rounded-full flex flex-col items-center justify-center text-xs md:text-sm transition-all duration-200 shadow-sm overflow-hidden p-1 bg-white text-slate-400 border border-slate-200 hover:border-purple-400 hover:text-purple-500 hover:bg-purple-50 font-semibold">
+                        <button onclick="openRecordModal(${i})" title="${i}일차 기록하기" class="grape-btn relative aspect-square rounded-full flex flex-col items-center justify-center text-xs md:text-sm transition-all duration-200 shadow-sm overflow-hidden p-1 bg-white text-slate-400 border border-slate-200 active:bg-purple-50 font-semibold">
                             ${i}
                         </button>
                     `;
                 }
             }
 
-            // 최근 기록 렌더링
             let recentRecordsHTML = '';
             const recordsEntries = Object.entries(challenge.records);
             if (recordsEntries.length > 0) {
-                const recentList = recordsEntries
-                    .sort((a, b) => Number(b[0]) - Number(a[0]))
-                    .slice(0, 5)
-                    .map(([day, record]) => `
-                        <div onclick="openRecordModal(${day})" class="flex gap-4 items-start p-3 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer">
-                            <div class="bg-purple-100 text-purple-700 font-bold px-3 py-1 rounded-lg text-sm whitespace-nowrap">
+                // 최근 기록 리스트 (기록일자 추가)
+                const recentList = recordsEntries.sort((a, b) => Number(b[0]) - Number(a[0])).slice(0, 5).map(([day, record]) => {
+                    const dateTag = record.date ? `<span class="text-xs text-slate-400 ml-2 font-normal">[${formatDate(record.date)}]</span>` : '';
+                    return `
+                        <div onclick="openRecordModal(${day})" class="flex gap-4 items-start p-3 active:bg-slate-50 rounded-xl transition-colors cursor-pointer border border-transparent active:border-purple-100">
+                            <div class="bg-purple-100 text-purple-700 font-bold px-3 py-1.5 rounded-lg text-sm whitespace-nowrap flex items-center">
                                 ${day}일차
                             </div>
-                            <div class="text-slate-700 flex-1">
-                                ${escapeHTML(record.note) || '<span class="text-slate-400 italic">내용 없음</span>'}
+                            <div class="text-slate-700 flex-1 pt-1">
+                                <div>
+                                    ${escapeHTML(record.note) || '<span class="text-slate-400 italic">내용 없음</span>'}
+                                </div>
+                                ${dateTag ? `<div class="mt-1">${dateTag}</div>` : ''}
                             </div>
                         </div>
-                    `).join('');
+                    `;
+                }).join('');
 
                 recentRecordsHTML = `
-                    <div class="bg-white rounded-3xl shadow-sm border border-purple-100 p-6 md:p-8 mt-6">
+                    <div class="bg-white rounded-3xl shadow-sm border border-purple-100 p-5 md:p-8 mt-6 mb-8 mx-4">
                         <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
                             <span class="text-purple-600">${Icons.Edit3}</span> 최근 기록
                         </h3>
-                        <div class="space-y-3">${recentList}</div>
+                        <div class="space-y-2">${recentList}</div>
                     </div>
                 `;
             }
 
             return `
-                <div class="fade-in">
-                    <div class="bg-white rounded-3xl shadow-sm border border-purple-100 p-6 md:p-8 mb-6">
-                        <div class="text-center mb-8">
+                <div class="fade-in max-w-3xl mx-auto">
+                    <div class="bg-white rounded-3xl shadow-sm border border-purple-100 p-5 md:p-8 mt-8 mb-6 mx-4">
+                        <div class="text-center mb-6">
                             <h2 class="text-2xl md:text-3xl font-black text-slate-800 mb-2">${escapeHTML(challenge.title)}</h2>
                             <p class="text-purple-600 font-medium">
                                 현재 <span class="text-xl font-bold">${completedCount}</span>개의 포도알을 모았어요! 🍇
                             </p>
                         </div>
                         
-                        <!-- 10x10 포도알 그리드 (모바일에서는 gap을 줄임) -->
-                        <div class="bg-purple-50/50 p-2 md:p-4 rounded-2xl border border-purple-100">
-                            <div class="grid grid-cols-10 gap-1 md:gap-2">
+                        <div class="bg-purple-50/50 p-3 md:p-4 rounded-2xl border border-purple-100">
+                            <div class="grid grid-cols-10 gap-1.5 md:gap-2">
                                 ${grapesHTML}
                             </div>
                         </div>
                         
-                        <div class="mt-6 flex items-start gap-2 text-sm text-slate-500 bg-slate-50 p-3 rounded-lg">
+                        <div class="mt-6 flex items-start gap-2 text-sm text-slate-500 bg-slate-50 p-4 rounded-xl">
                             <span class="text-purple-500 mt-0.5 flex-shrink-0">${Icons.Info}</span>
-                            <p>동그라미를 클릭하여 그날의 기록(예: 5km, 기분 등)을 남기고 포도알을 채워보세요. 이미 채운 포도알을 다시 클릭하면 기록을 수정할 수 있습니다.</p>
+                            <p>포도알을 눌러 기록을 남기세요. 이미 채운 포도알을 다시 누르면 수정할 수 있습니다.</p>
                         </div>
                     </div>
                     ${recentRecordsHTML}
@@ -314,21 +327,20 @@
         function renderModals() {
             let modalsHTML = '';
 
-            // 1. 새 도전 추가 모달
             if (state.isAddModalOpen) {
                 modalsHTML += `
-                    <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                        <div class="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl scale-in">
+                    <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+                        <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md overflow-hidden shadow-2xl scale-in pb-safe">
                             <div class="p-6">
                                 <h2 class="text-xl font-bold text-slate-800 mb-4">새로운 100일 도전 🚀</h2>
                                 <form onsubmit="submitChallenge(event)">
                                     <div class="mb-6">
                                         <label class="block text-sm font-medium text-slate-600 mb-2">어떤 도전을 시작할까요?</label>
-                                        <input type="text" id="newChallengeTitle" placeholder="예) 매일 3km 러닝하기" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all" autofocus required />
+                                        <input type="text" id="newChallengeTitle" placeholder="예) 매일 3km 러닝하기" class="w-full px-4 py-4 sm:py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all text-lg sm:text-base" autofocus required />
                                     </div>
-                                    <div class="flex gap-2 justify-end">
-                                        <button type="button" onclick="closeAddModal()" class="px-5 py-2.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 transition-colors">취소</button>
-                                        <button type="submit" class="px-5 py-2.5 rounded-xl font-medium bg-purple-600 hover:bg-purple-700 text-white transition-colors flex items-center gap-2">
+                                    <div class="flex gap-2 justify-end mt-4">
+                                        <button type="button" onclick="closeAddModal()" class="px-5 py-3 sm:py-2.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 active:bg-slate-200 transition-colors flex-1 sm:flex-none">취소</button>
+                                        <button type="submit" class="px-5 py-3 sm:py-2.5 rounded-xl font-medium bg-purple-600 active:bg-purple-700 text-white transition-colors flex items-center justify-center gap-2 flex-1 sm:flex-none">
                                             ${Icons.Check} 시작하기
                                         </button>
                                     </div>
@@ -339,49 +351,49 @@
                 `;
             }
 
-            // 2. 삭제 확인 모달
             if (state.deleteConfirm.isOpen) {
                 modalsHTML += `
-                    <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                        <div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl scale-in p-6 text-center">
-                            <div class="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                        <div class="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl scale-in p-6 text-center">
+                            <div class="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
                                 ${Icons.Trash2}
                             </div>
                             <h3 class="text-lg font-bold text-slate-800 mb-2">도전 삭제</h3>
                             <p class="text-slate-500 text-sm mb-6">정말 이 도전을 삭제하시겠습니까?<br>모든 기록이 영구적으로 사라집니다.</p>
-                            <div class="flex gap-2 justify-center">
-                                <button onclick="cancelDelete()" class="px-5 py-2.5 rounded-xl font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors flex-1">취소</button>
-                                <button onclick="confirmDelete()" class="px-5 py-2.5 rounded-xl font-medium bg-red-500 hover:bg-red-600 text-white transition-colors flex-1">삭제하기</button>
+                            <div class="flex gap-3 justify-center">
+                                <button onclick="cancelDelete()" class="px-5 py-3 rounded-xl font-medium text-slate-600 bg-slate-100 active:bg-slate-200 transition-colors flex-1">취소</button>
+                                <button onclick="confirmDelete()" class="px-5 py-3 rounded-xl font-medium bg-red-500 active:bg-red-600 text-white transition-colors flex-1">삭제하기</button>
                             </div>
                         </div>
                     </div>
                 `;
             }
 
-            // 3. 기록 추가/수정 모달
             if (state.isRecordModalOpen && state.selectedDay) {
                 const challenge = state.challenges.find(c => c.id === state.activeChallengeId);
-                const hasRecord = !!challenge.records[state.selectedDay];
+                const record = challenge.records[state.selectedDay];
+                const hasRecord = !!record;
+                // 모달 상단에 날짜 표시
+                const dateDisplay = (hasRecord && record.date) ? ` <span class="text-sm font-normal text-purple-400">(${formatDate(record.date)})</span>` : '';
                 
                 modalsHTML += `
-                    <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                        <div class="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl scale-in">
+                    <div class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+                        <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-md overflow-hidden shadow-2xl scale-in pb-safe">
                             <div class="p-6 border-b border-slate-100 bg-purple-50/50">
                                 <div class="flex justify-between items-center">
-                                    <h2 class="text-xl font-black text-purple-700">${state.selectedDay}일차 기록 🍇</h2>
-                                    ${hasRecord ? `<button onclick="removeRecord()" class="text-red-400 hover:text-red-600 text-sm font-medium px-2 py-1 bg-white rounded-md border border-red-100 shadow-sm">포도알 지우기</button>` : ''}
+                                    <h2 class="text-xl font-black text-purple-700">${state.selectedDay}일차 기록 🍇${dateDisplay}</h2>
+                                    ${hasRecord ? `<button onclick="removeRecord()" class="text-red-500 active:bg-red-50 text-sm font-medium px-3 py-1.5 bg-white rounded-lg border border-red-100 shadow-sm transition-colors">포도알 지우기</button>` : ''}
                                 </div>
-                                <p class="text-sm text-slate-600 mt-1">${escapeHTML(challenge.title)}</p>
+                                <p class="text-sm text-slate-600 mt-1 line-clamp-1">${escapeHTML(challenge.title)}</p>
                             </div>
                             <div class="p-6">
                                 <form onsubmit="saveRecord(event)">
                                     <div class="mb-6">
-                                        <label class="block text-sm font-medium text-slate-600 mb-2">오늘의 달성 내용 (포도알에 표시됩니다)</label>
-                                        <textarea id="recordNote" placeholder="예) 5km (짧게 쓰면 포도알에 예쁘게 보여요!)" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all resize-none h-32" autofocus></textarea>
+                                        <textarea id="recordNote" placeholder="예) 5km (짧게 쓰면 예뻐요!)" class="w-full px-4 py-4 sm:py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all resize-none h-32 text-lg sm:text-base"></textarea>
                                     </div>
                                     <div class="flex gap-2 justify-end">
-                                        <button type="button" onclick="closeRecordModal()" class="px-5 py-2.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 transition-colors">닫기</button>
-                                        <button type="submit" class="px-5 py-2.5 rounded-xl font-medium bg-purple-600 hover:bg-purple-700 text-white transition-colors flex items-center gap-2">
+                                        <button type="button" onclick="closeRecordModal()" class="px-5 py-3 sm:py-2.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 active:bg-slate-200 transition-colors flex-1 sm:flex-none">닫기</button>
+                                        <button type="submit" class="px-5 py-3 sm:py-2.5 rounded-xl font-medium bg-purple-600 active:bg-purple-700 text-white transition-colors flex items-center justify-center gap-2 flex-1 sm:flex-none">
                                             ${Icons.Check} 포도알 칠하기
                                         </button>
                                     </div>
@@ -395,27 +407,16 @@
             return modalsHTML;
         }
 
-        // 전체 화면 렌더링
         function render() {
-            const app = document.getElementById('app');
-            let content = '';
-
-            if (state.currentView === 'list') {
-                content = renderListView();
-            } else if (state.currentView === 'detail') {
-                content = renderDetailView();
-            }
-
-            app.innerHTML = `
+            document.getElementById('app').innerHTML = `
                 ${renderHeader()}
-                <main class="max-w-3xl mx-auto px-4 py-8">
-                    ${content}
+                <main>
+                    ${state.currentView === 'list' ? renderListView() : renderDetailView()}
                 </main>
                 ${renderModals()}
             `;
         }
 
-        // 초기 렌더링
         render();
     </script>
 </body>
