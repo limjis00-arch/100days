@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>100일 포도알 챌린지</title>
+    <!-- Tailwind CSS (디자인을 위한 CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 부드러운 애니메이션 효과 */
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        .scale-in { animation: scaleIn 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes scaleIn {
+            from { transform: scale(0.95); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        
+        /* 모바일에서 포도알이 너무 작아지지 않도록 최소 크기 지정 */
+        .grape-btn {
+            min-height: 36px;
+        }
+        @media (min-width: 768px) {
+            .grape-btn { min-height: 48px; }
+        }
+    </style>
+</head>
+<body class="bg-purple-50 text-slate-800 font-sans min-h-screen">
+
+    <!-- 앱 전체가 렌더링될 컨테이너 -->
+    <div id="app"></div>
+
+    <script>
+        // --- 유틸리티 ---
+        const generateId = () => Math.random().toString(36).substr(2, 9);
+        const escapeHTML = (str) => {
+            if (!str) return '';
+            return str.replace(/[&<>'"]/g, tag => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+            }[tag]));
+        };
+
+        // --- 아이콘 (SVG) ---
+        const Icons = {
+            Plus: `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>`,
+            ChevronLeft: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`,
+            Trash2: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>`,
+            Check: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`,
+            Info: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`,
+            Edit3: `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`
+        };
+
+        // --- 전역 상태 관리 ---
+        let state = {
+            challenges: JSON.parse(localStorage.getItem('100days-challenges')) || [],
+            currentView: 'list', // 'list' | 'detail'
+            activeChallengeId: null,
+            isAddModalOpen: false,
+            isRecordModalOpen: false,
+            selectedDay: null,
+            deleteConfirm: { isOpen: false, id: null }
+        };
+
+        // 상태 업데이트 및 재렌더링
+        function updateState(newState) {
+            state = { ...state, ...newState };
+            localStorage.setItem('100days-challenges', JSON.stringify(state.challenges));
+            render();
+        }
+
+        // --- 글로벌 핸들러 (HTML에서 직접 호출) ---
+        window.goToList = () => updateState({ currentView: 'list', activeChallengeId: null });
+        window.openAddModal = () => updateState({ isAddModalOpen: true });
+        window.closeAddModal = () => updateState({ isAddModalOpen: false });
+        
+        window.openChallenge = (id) => updateState({ currentView: 'detail', activeChallengeId: id });
+
+        window.submitChallenge = (event) => {
+            event.preventDefault();
+            const input = document.getElementById('newChallengeTitle');
+            const title = input.value.trim();
+            if (!title) return;
+
+            const newChallenge = {
+                id: generateId(),
+                title: title,
+                createdAt: new Date().toISOString(),
+                records: {}
+            };
+            
+            updateState({
+                challenges: [newChallenge, ...state.challenges],
+                isAddModalOpen: false
+            });
+        };
+
+        // 삭제 확인 모달 관련
+        window.promptDelete = (id, event) => {
+            event.stopPropagation();
+            updateState({ deleteConfirm: { isOpen: true, id: id } });
+        };
+        window.cancelDelete = () => updateState({ deleteConfirm: { isOpen: false, id: null } });
+        window.confirmDelete = () => {
+            const id = state.deleteConfirm.id;
+            const newChallenges = state.challenges.filter(c => c.id !== id);
+            let updates = { challenges: newChallenges, deleteConfirm: { isOpen: false, id: null } };
+            
+            if (state.activeChallengeId === id) {
+                updates.currentView = 'list';
+                updates.activeChallengeId = null;
+            }
+            updateState(updates);
+        };
+
+        // 기록 모달 관련
+        window.openRecordModal = (day) => {
+            updateState({ isRecordModalOpen: true, selectedDay: day });
+            // 모달이 렌더링된 후 기존 값이 있으면 채워넣기 위함
+            setTimeout(() => {
+                const active = state.challenges.find(c => c.id === state.activeChallengeId);
+                const record = active.records[day];
+                if (record) {
+                    document.getElementById('recordNote').value = record.note;
+                }
+                document.getElementById('recordNote').focus();
+            }, 0);
+        };
+        window.closeRecordModal = () => updateState({ isRecordModalOpen: false, selectedDay: null });
+
+        window.saveRecord = (event) => {
+            event.preventDefault();
+            const note = document.getElementById('recordNote').value.trim();
+            const day = state.selectedDay;
+            
+            const newChallenges = state.challenges.map(c => {
+                if (c.id === state.activeChallengeId) {
+                    return {
+                        ...c,
+                        records: {
+                            ...c.records,
+                            [day]: { completed: true, note: note, date: new Date().toISOString() }
+                        }
+                    };
+                }
+                return c;
+            });
+            updateState({ challenges: newChallenges, isRecordModalOpen: false, selectedDay: null });
+        };
+
+        window.removeRecord = () => {
+            const day = state.selectedDay;
+            const newChallenges = state.challenges.map(c => {
+                if (c.id === state.activeChallengeId) {
+                    const newRecords = { ...c.records };
+                    delete newRecords[day];
+                    return { ...c, records: newRecords };
+                }
+                return c;
+            });
+            updateState({ challenges: newChallenges, isRecordModalOpen: false, selectedDay: null });
+        };
+
+        // --- 렌더링 함수 ---
+        function renderHeader() {
+            return `
+                <header class="bg-white shadow-sm sticky top-0 z-10">
+                    <div class="max-w-3xl mx-auto px-4 h-16 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            ${state.currentView === 'detail' ? `
+                                <button onclick="goToList()" class="p-2 -ml-2 text-slate-500 hover:text-purple-600 hover:bg-purple-50 rounded-full transition-colors">
+                                    ${Icons.ChevronLeft}
+                                </button>
+                            ` : ''}
+                            <h1 class="text-xl font-bold text-purple-700 flex items-center gap-2">
+                                🍇 100일 포도알
+                            </h1>
+                        </div>
+                        ${state.currentView === 'list' ? `
+                            <button onclick="openAddModal()" class="flex items-center gap-1 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-full text-sm font-medium transition-colors shadow-sm">
+                                ${Icons.Plus} 새 도전
+                            </button>
+                        ` : ''}
+                    </div>
+                </header>
+            `;
+        }
+
+        function renderListView() {
+            if (state.challenges.length === 0) {
+                return `
+                    <div class="text-center py-20 bg-white rounded-2xl shadow-sm border border-purple-100 fade-in">
+                        <div class="text-6xl mb-4">🌱</div>
+                        <h2 class="text-xl font-semibold text-slate-700 mb-2">아직 시작한 도전이 없어요!</h2>
+                        <p class="text-slate-500 mb-6">첫 번째 100일 챌린지를 만들어 포도알을 모아보세요.</p>
+                        <button onclick="openAddModal()" class="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-full font-medium transition-colors">
+                            ${Icons.Plus} 첫 번째 목표 만들기
+                        </button>
+                    </div>
+                `;
+            }
+
+            const cardsHTML = state.challenges.map(challenge => {
+                const completedDays = Object.keys(challenge.records).length;
+                const progress = Math.round((completedDays / 100) * 100);
+                
+                return `
+                    <div onclick="openChallenge('${challenge.id}')" class="bg-white p-5 rounded-2xl shadow-sm border border-purple-100 hover:shadow-md hover:border-purple-300 transition-all cursor-pointer group fade-in">
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="text-lg font-bold text-slate-800 line-clamp-2">${escapeHTML(challenge.title)}</h3>
+                            <button onclick="promptDelete('${challenge.id}', event)" class="text-slate-300 hover:text-red-500 p-1 rounded-full hover:bg-red-50 md:opacity-0 group-hover:opacity-100 transition-all">
+                                ${Icons.Trash2}
+                            </button>
+                        </div>
+                        <div class="flex items-end justify-between mb-2">
+                            <span class="text-sm font-medium text-slate-500">진행률</span>
+                            <span class="text-2xl font-black text-purple-600">${progress}%</span>
+                        </div>
+                        <div class="w-full bg-purple-100 rounded-full h-2.5">
+                            <div class="bg-purple-600 h-2.5 rounded-full transition-all duration-500" style="width: ${progress}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            return `<div class="grid gap-4 sm:grid-cols-2">${cardsHTML}</div>`;
+        }
+
+        function renderDetailView() {
+            const challenge = state.challenges.find(c => c.id === state.activeChallengeId);
+            if (!challenge) return '';
+
+            const completedCount = Object.keys(challenge.records).length;
+
+            let grapesHTML = '';
+            for (let i = 1; i <= 100; i++) {
+                const record = challenge.records[i];
+                const isCompleted = !!record;
+                
+                if (isCompleted) {
+                    grapesHTML += `
+                        <button onclick="openRecordModal(${i})" title="${i}일차 : ${escapeHTML(record.note)}" class="grape-btn relative aspect-square rounded-full flex flex-col items-center justify-center text-xs md:text-sm transition-all duration-200 shadow-sm overflow-hidden p-1 bg-gradient-to-br from-purple-500 to-purple-700 text-white hover:shadow-lg hover:scale-110">
+                            <span class="font-bold opacity-90 leading-none">${i}</span>
+                            ${record.note ? `<span class="text-[9px] md:text-[10px] font-normal opacity-80 truncate w-full text-center mt-0.5 md:mt-1 px-1 block">${escapeHTML(record.note)}</span>` : ''}
+                        </button>
+                    `;
+                } else {
+                    grapesHTML += `
+                        <button onclick="openRecordModal(${i})" title="${i}일차 기록하기" class="grape-btn relative aspect-square rounded-full flex flex-col items-center justify-center text-xs md:text-sm transition-all duration-200 shadow-sm overflow-hidden p-1 bg-white text-slate-400 border border-slate-200 hover:border-purple-400 hover:text-purple-500 hover:bg-purple-50 font-semibold">
+                            ${i}
+                        </button>
+                    `;
+                }
+            }
+
+            // 최근 기록 렌더링
+            let recentRecordsHTML = '';
+            const recordsEntries = Object.entries(challenge.records);
+            if (recordsEntries.length > 0) {
+                const recentList = recordsEntries
+                    .sort((a, b) => Number(b[0]) - Number(a[0]))
+                    .slice(0, 5)
+                    .map(([day, record]) => `
+                        <div onclick="openRecordModal(${day})" class="flex gap-4 items-start p-3 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer">
+                            <div class="bg-purple-100 text-purple-700 font-bold px-3 py-1 rounded-lg text-sm whitespace-nowrap">
+                                ${day}일차
+                            </div>
+                            <div class="text-slate-700 flex-1">
+                                ${escapeHTML(record.note) || '<span class="text-slate-400 italic">내용 없음</span>'}
+                            </div>
+                        </div>
+                    `).join('');
+
+                recentRecordsHTML = `
+                    <div class="bg-white rounded-3xl shadow-sm border border-purple-100 p-6 md:p-8 mt-6">
+                        <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                            <span class="text-purple-600">${Icons.Edit3}</span> 최근 기록
+                        </h3>
+                        <div class="space-y-3">${recentList}</div>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="fade-in">
+                    <div class="bg-white rounded-3xl shadow-sm border border-purple-100 p-6 md:p-8 mb-6">
+                        <div class="text-center mb-8">
+                            <h2 class="text-2xl md:text-3xl font-black text-slate-800 mb-2">${escapeHTML(challenge.title)}</h2>
+                            <p class="text-purple-600 font-medium">
+                                현재 <span class="text-xl font-bold">${completedCount}</span>개의 포도알을 모았어요! 🍇
+                            </p>
+                        </div>
+                        
+                        <!-- 10x10 포도알 그리드 (모바일에서는 gap을 줄임) -->
+                        <div class="bg-purple-50/50 p-2 md:p-4 rounded-2xl border border-purple-100">
+                            <div class="grid grid-cols-10 gap-1 md:gap-2">
+                                ${grapesHTML}
+                            </div>
+                        </div>
+                        
+                        <div class="mt-6 flex items-start gap-2 text-sm text-slate-500 bg-slate-50 p-3 rounded-lg">
+                            <span class="text-purple-500 mt-0.5 flex-shrink-0">${Icons.Info}</span>
+                            <p>동그라미를 클릭하여 그날의 기록(예: 5km, 기분 등)을 남기고 포도알을 채워보세요. 이미 채운 포도알을 다시 클릭하면 기록을 수정할 수 있습니다.</p>
+                        </div>
+                    </div>
+                    ${recentRecordsHTML}
+                </div>
+            `;
+        }
+
+        function renderModals() {
+            let modalsHTML = '';
+
+            // 1. 새 도전 추가 모달
+            if (state.isAddModalOpen) {
+                modalsHTML += `
+                    <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                        <div class="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl scale-in">
+                            <div class="p-6">
+                                <h2 class="text-xl font-bold text-slate-800 mb-4">새로운 100일 도전 🚀</h2>
+                                <form onsubmit="submitChallenge(event)">
+                                    <div class="mb-6">
+                                        <label class="block text-sm font-medium text-slate-600 mb-2">어떤 도전을 시작할까요?</label>
+                                        <input type="text" id="newChallengeTitle" placeholder="예) 매일 3km 러닝하기" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all" autofocus required />
+                                    </div>
+                                    <div class="flex gap-2 justify-end">
+                                        <button type="button" onclick="closeAddModal()" class="px-5 py-2.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 transition-colors">취소</button>
+                                        <button type="submit" class="px-5 py-2.5 rounded-xl font-medium bg-purple-600 hover:bg-purple-700 text-white transition-colors flex items-center gap-2">
+                                            ${Icons.Check} 시작하기
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 2. 삭제 확인 모달
+            if (state.deleteConfirm.isOpen) {
+                modalsHTML += `
+                    <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                        <div class="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl scale-in p-6 text-center">
+                            <div class="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                                ${Icons.Trash2}
+                            </div>
+                            <h3 class="text-lg font-bold text-slate-800 mb-2">도전 삭제</h3>
+                            <p class="text-slate-500 text-sm mb-6">정말 이 도전을 삭제하시겠습니까?<br>모든 기록이 영구적으로 사라집니다.</p>
+                            <div class="flex gap-2 justify-center">
+                                <button onclick="cancelDelete()" class="px-5 py-2.5 rounded-xl font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors flex-1">취소</button>
+                                <button onclick="confirmDelete()" class="px-5 py-2.5 rounded-xl font-medium bg-red-500 hover:bg-red-600 text-white transition-colors flex-1">삭제하기</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 3. 기록 추가/수정 모달
+            if (state.isRecordModalOpen && state.selectedDay) {
+                const challenge = state.challenges.find(c => c.id === state.activeChallengeId);
+                const hasRecord = !!challenge.records[state.selectedDay];
+                
+                modalsHTML += `
+                    <div class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                        <div class="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl scale-in">
+                            <div class="p-6 border-b border-slate-100 bg-purple-50/50">
+                                <div class="flex justify-between items-center">
+                                    <h2 class="text-xl font-black text-purple-700">${state.selectedDay}일차 기록 🍇</h2>
+                                    ${hasRecord ? `<button onclick="removeRecord()" class="text-red-400 hover:text-red-600 text-sm font-medium px-2 py-1 bg-white rounded-md border border-red-100 shadow-sm">포도알 지우기</button>` : ''}
+                                </div>
+                                <p class="text-sm text-slate-600 mt-1">${escapeHTML(challenge.title)}</p>
+                            </div>
+                            <div class="p-6">
+                                <form onsubmit="saveRecord(event)">
+                                    <div class="mb-6">
+                                        <label class="block text-sm font-medium text-slate-600 mb-2">오늘의 달성 내용 (포도알에 표시됩니다)</label>
+                                        <textarea id="recordNote" placeholder="예) 5km (짧게 쓰면 포도알에 예쁘게 보여요!)" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all resize-none h-32" autofocus></textarea>
+                                    </div>
+                                    <div class="flex gap-2 justify-end">
+                                        <button type="button" onclick="closeRecordModal()" class="px-5 py-2.5 rounded-xl font-medium text-slate-600 hover:bg-slate-100 transition-colors">닫기</button>
+                                        <button type="submit" class="px-5 py-2.5 rounded-xl font-medium bg-purple-600 hover:bg-purple-700 text-white transition-colors flex items-center gap-2">
+                                            ${Icons.Check} 포도알 칠하기
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            return modalsHTML;
+        }
+
+        // 전체 화면 렌더링
+        function render() {
+            const app = document.getElementById('app');
+            let content = '';
+
+            if (state.currentView === 'list') {
+                content = renderListView();
+            } else if (state.currentView === 'detail') {
+                content = renderDetailView();
+            }
+
+            app.innerHTML = `
+                ${renderHeader()}
+                <main class="max-w-3xl mx-auto px-4 py-8">
+                    ${content}
+                </main>
+                ${renderModals()}
+            `;
+        }
+
+        // 초기 렌더링
+        render();
+    </script>
+</body>
+</html>
